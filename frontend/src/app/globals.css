@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  --chip-bg: #0a0e14;
+  --chip-panel: #111820;
+  --chip-border: #1e2a3a;
+  --chip-accent: #00e5a0;
+  --chip-accent2: #00b4d8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--chip-bg);
+  color: #c8d6e5;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+.react-flow__node {
+  font-family: "JetBrains Mono", monospace;
+}
+
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 229, 160, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 160, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.panel {
+  @apply bg-chip-panel border border-chip-border rounded-lg;
+}
+
+.metric-positive {
+  @apply text-chip-accent;
+}
+
+.metric-negative {
+  @apply text-chip-danger;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #1e2a3a;
+  border-radius: 3px;
+}

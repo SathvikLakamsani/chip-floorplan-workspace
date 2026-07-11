@@ -1,0 +1,20 @@
+# FastRoute Congestion Report (mock format)
+# Design: toy_ai_accelerator
+
+Global Routing Summary
+======================
+Congestion Score: 0.73
+Overflow Cells: 142
+Max Overflow: 3 layers
+
+Regional Congestion Hotspots:
+  Region (700-1000, 500-800): overflow = 0.85  [memory_controller, sram_2, sram_3]
+  Region (350-550, 250-450):  overflow = 0.62  [compute_array]
+  Region (380-560, 500-640):  overflow = 0.71  [noc_router]
+
+Area Utilization: 61%
+Standard Cell Area: 488000 um^2
+Macro Area: 122000 um^2
+Total Wire Length: 12800 um
+
+Power Estimate: 4.2 W

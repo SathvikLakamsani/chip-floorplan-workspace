@@ -1,0 +1,18 @@
+# OpenSTA Timing Report (mock format)
+# Design: toy_ai_accelerator
+# Corner: typical
+
+Timing Summary
+==============
+WNS = -0.12 ns
+TNS = -2.40 ns
+Critical Path: compute_array -> sram_0 (data path)
+Slack: -0.12 ns
+
+Top Violations:
+  1. compute_array/REG -> sram_0/PORT  slack = -0.12 ns
+  2. compute_array/ALU -> sram_1/PORT  slack = -0.08 ns
+  3. pll/CLK_OUT -> compute_array/CLK  slack = -0.05 ns
+
+Total Paths Analyzed: 1247
+Failing Paths: 18
