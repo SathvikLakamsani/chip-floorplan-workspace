@@ -10,12 +10,14 @@ import { useLayoutStore } from "@/store/layoutStore";
 
 export default function EditorPage() {
   const loadExample = useLayoutStore((s) => s.loadExample);
+  const loadConfig = useLayoutStore((s) => s.loadConfig);
   const loading = useLayoutStore((s) => s.loading);
   const error = useLayoutStore((s) => s.error);
 
   useEffect(() => {
+    loadConfig();
     loadExample();
-  }, [loadExample]);
+  }, [loadConfig, loadExample]);
 
   return (
     <div className="h-screen flex flex-col">

@@ -75,6 +75,13 @@ export interface CommandResponse {
   preview_layout: Layout | null;
   expected_metric_delta: Record<string, number>;
   explanation: string;
+  source: "rule" | "llm" | "none";
+}
+
+export interface AppConfig {
+  llm_enabled: boolean;
+  llm_provider: string | null;
+  llm_model: string | null;
 }
 
 export interface CandidateLayout {

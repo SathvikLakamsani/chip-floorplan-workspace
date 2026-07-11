@@ -81,7 +81,21 @@ Open [http://localhost:3000](http://localhost:3000).
 - **Candidates**: Generate and compare 3 layout alternatives
 - **Export**: Download layout as JSON
 
-## Example Commands
+## Natural-language commands
+
+The command bar uses a **hybrid parser**:
+
+1. **Rule-based (default, no API key):** instant, deterministic handling of common
+   commands. Works out of the box.
+2. **AI fallback (optional):** if an LLM API key is set, any command that doesn't
+   match a rule is sent to the model, which returns the same structured actions.
+   This enables open-ended phrasing.
+
+Either way, the AI/rules layer **never silently changes the layout** — every command
+produces a preview (proposed actions, reason, affected blocks, expected metric
+impact) gated behind **Apply / Cancel**.
+
+### Rule-based examples (always work)
 
 - `Move SRAM closer to compute`
 - `Lock the PLL`
@@ -89,10 +103,35 @@ Open [http://localhost:3000](http://localhost:3000).
 - `Reduce congestion near the top right`
 - `Generate three candidate layouts`
 
+### Open-ended examples (require an API key)
+
+- `Push the SRAM banks toward the bottom-left corner`
+- `Give the NoC router more breathing room`
+- `Cluster everything on the critical datapath together`
+
+### Enabling the AI parser
+
+No key is required for the MVP. To enable open-ended commands, copy
+`backend/.env.example` to `backend/.env` and set **one** of:
+
+```bash
+# Anthropic (Claude)
+ANTHROPIC_API_KEY=sk-ant-...
+
+# or OpenAI (GPT)
+OPENAI_API_KEY=sk-...
+```
+
+Optional overrides: `LLM_PROVIDER` (`anthropic`|`openai`), `LLM_MODEL`.
+The command bar shows an **AI ✦** badge when a provider is active, or
+**rules only** otherwise. Load env vars before starting uvicorn (e.g.
+`export $(grep -v '^#' .env | xargs)` or use a process manager).
+
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
+| GET | `/api/config` | Report runtime capabilities (AI parser status) |
 | GET | `/api/layouts/example` | Load toy AI accelerator design |
 | POST | `/api/layouts/analyze` | Compute layout metrics |
 | POST | `/api/layouts/command` | Parse natural-language command |
@@ -108,7 +147,7 @@ Open [http://localhost:3000](http://localhost:3000).
 - Timing report parser (OpenSTA format)
 - Congestion report parser (FastRoute format)
 - Tcl constraint export for ORFS
-- LLM structured-output command parser
+- ~~LLM structured-output command parser~~ ✅ done (hybrid rule + LLM)
 - OpenROAD rerun pipeline (floorplan → placement → routing → STA)
 
 ## Tech Stack

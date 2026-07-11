@@ -1,5 +1,6 @@
 import type {
   AnalyzeResponse,
+  AppConfig,
   CommandResponse,
   ExportResponse,
   GenerateCandidatesResponse,
@@ -18,6 +19,10 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(`API error ${res.status}: ${text}`);
   }
   return res.json();
+}
+
+export async function getConfig(): Promise<AppConfig> {
+  return fetchApi<AppConfig>("/api/config");
 }
 
 export async function getExampleLayout(): Promise<Layout> {

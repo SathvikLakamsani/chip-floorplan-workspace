@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  AppConfig,
   CandidateLayout,
   CommandAction,
   CommandResponse,
@@ -11,6 +12,7 @@ import {
   applyActions,
   exportLayout,
   generateCandidates,
+  getConfig,
   getExampleLayout,
   parseCommand,
 } from "@/lib/api";
@@ -32,7 +34,9 @@ interface LayoutStore {
   error: string | null;
   pendingCommand: CommandResponse | null;
   explanations: string[];
+  config: AppConfig | null;
 
+  loadConfig: () => Promise<void>;
   loadExample: () => Promise<void>;
   setSelectedBlock: (id: string | null) => void;
   updateBlock: (blockId: string, updates: Partial<Layout["blocks"][0]>) => void;
@@ -61,6 +65,16 @@ export const useLayoutStore = create<LayoutStore>((set, get) => ({
   error: null,
   pendingCommand: null,
   explanations: [],
+  config: null,
+
+  loadConfig: async () => {
+    try {
+      const config = await getConfig();
+      set({ config });
+    } catch {
+      set({ config: { llm_enabled: false, llm_provider: null, llm_model: null } });
+    }
+  },
 
   loadExample: async () => {
     set({ loading: true, error: null });

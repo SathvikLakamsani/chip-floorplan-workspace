@@ -64,6 +64,16 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/config")
+def get_config() -> dict[str, object]:
+    """Report runtime capabilities to the frontend."""
+    return {
+        "llm_enabled": _parser._llm.is_configured(),
+        "llm_provider": _parser._llm.provider,
+        "llm_model": _parser._llm.model if _parser._llm.is_configured() else None,
+    }
+
+
 @app.get("/api/layouts/example", response_model=Layout)
 def get_example_layout() -> Layout:
     return _load_example_layout()
