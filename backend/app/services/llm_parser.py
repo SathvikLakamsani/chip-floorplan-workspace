@@ -6,7 +6,8 @@ bottom-left and give the router more breathing room") into the same structured
 CommandAction list that the rest of the system already knows how to apply.
 
 Design goals:
-- Provider-agnostic: supports Anthropic (Claude) and OpenAI (GPT).
+- Provider-agnostic: supports Anthropic (Claude), OpenAI (GPT), and Google
+  (Gemini).
 - Zero-config safe: if no API key is present, `is_configured()` returns False
   and the caller falls back to the rule-based parser. No key => no crash.
 - Structured output: the model is asked for strict JSON matching our action
@@ -14,9 +15,10 @@ Design goals:
   actions are dropped.
 
 Environment variables:
-    LLM_PROVIDER      "anthropic" | "openai"  (optional; auto-detected from keys)
+    LLM_PROVIDER      "anthropic" | "openai" | "gemini" (optional; auto-detected)
     ANTHROPIC_API_KEY Anthropic key
     OPENAI_API_KEY    OpenAI key
+    GEMINI_API_KEY    Google Gemini key (GOOGLE_API_KEY also accepted)
     LLM_MODEL         Override the default model name (optional)
 """
 
@@ -30,6 +32,7 @@ from app.models.layout import ActionType, CommandAction, Layout
 
 DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-latest"
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 
 _VALID_ACTION_TYPES = {a.value for a in ActionType}
 
@@ -44,26 +47,34 @@ class LLMCommandParser:
     def __init__(self) -> None:
         self.anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
         self.openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        self.gemini_key = (
+            os.environ.get("GEMINI_API_KEY", "").strip()
+            or os.environ.get("GOOGLE_API_KEY", "").strip()
+        )
         self.provider = self._resolve_provider()
         self.model = os.environ.get("LLM_MODEL", "").strip() or self._default_model()
 
     def _resolve_provider(self) -> str | None:
+        keys = {
+            "anthropic": self.anthropic_key,
+            "openai": self.openai_key,
+            "gemini": self.gemini_key,
+        }
         explicit = os.environ.get("LLM_PROVIDER", "").strip().lower()
-        if explicit in ("anthropic", "openai"):
-            # Honor explicit choice only if the matching key exists.
-            if explicit == "anthropic" and self.anthropic_key:
-                return "anthropic"
-            if explicit == "openai" and self.openai_key:
-                return "openai"
-        if self.anthropic_key:
-            return "anthropic"
-        if self.openai_key:
-            return "openai"
+        # Honor an explicit choice only if the matching key exists.
+        if explicit in keys and keys[explicit]:
+            return explicit
+        # Otherwise auto-detect from whichever key is present.
+        for provider in ("anthropic", "openai", "gemini"):
+            if keys[provider]:
+                return provider
         return None
 
     def _default_model(self) -> str:
         if self.provider == "openai":
             return DEFAULT_OPENAI_MODEL
+        if self.provider == "gemini":
+            return DEFAULT_GEMINI_MODEL
         return DEFAULT_ANTHROPIC_MODEL
 
     def is_configured(self) -> bool:
@@ -171,6 +182,8 @@ class LLMCommandParser:
             return self._call_anthropic(httpx, system_prompt, user_prompt)
         if self.provider == "openai":
             return self._call_openai(httpx, system_prompt, user_prompt)
+        if self.provider == "gemini":
+            return self._call_gemini(httpx, system_prompt, user_prompt)
         raise LLMError("No LLM provider configured.")
 
     def _call_anthropic(self, httpx, system_prompt: str, user_prompt: str) -> str:
@@ -232,6 +245,46 @@ class LLMCommandParser:
             return data["choices"][0]["message"]["content"]
         except (KeyError, IndexError) as exc:
             raise LLMError(f"Unexpected OpenAI response shape: {exc}") from exc
+
+    def _call_gemini(self, httpx, system_prompt: str, user_prompt: str) -> str:
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/"
+            f"models/{self.model}:generateContent"
+        )
+        try:
+            resp = httpx.post(
+                url,
+                headers={
+                    "x-goog-api-key": self.gemini_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "systemInstruction": {"parts": [{"text": system_prompt}]},
+                    "contents": [
+                        {"role": "user", "parts": [{"text": user_prompt}]}
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "responseMimeType": "application/json",
+                    },
+                },
+                timeout=30.0,
+            )
+        except httpx.HTTPError as exc:
+            raise LLMError(f"Gemini request failed: {exc}") from exc
+        if resp.status_code != 200:
+            raise LLMError(f"Gemini API error {resp.status_code}: {resp.text[:200]}")
+        data = resp.json()
+        try:
+            candidates = data.get("candidates", [])
+            if not candidates:
+                # A prompt/safety block returns no candidates.
+                feedback = data.get("promptFeedback", {})
+                raise LLMError(f"Gemini returned no candidates: {feedback}")
+            parts = candidates[0].get("content", {}).get("parts", [])
+            return "".join(part.get("text", "") for part in parts)
+        except (KeyError, IndexError, AttributeError) as exc:
+            raise LLMError(f"Unexpected Gemini response shape: {exc}") from exc
 
     # ------------------------------------------------------------------
     # Output parsing / validation

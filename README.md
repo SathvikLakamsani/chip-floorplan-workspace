@@ -115,14 +115,19 @@ No key is required for the MVP. To enable open-ended commands, copy
 `backend/.env.example` to `backend/.env` and set **one** of:
 
 ```bash
-# Anthropic (Claude)
+# Google (Gemini)
+GEMINI_API_KEY=...
+
+# or Anthropic (Claude)
 ANTHROPIC_API_KEY=sk-ant-...
 
 # or OpenAI (GPT)
 OPENAI_API_KEY=sk-...
 ```
 
-Optional overrides: `LLM_PROVIDER` (`anthropic`|`openai`), `LLM_MODEL`.
+Optional overrides: `LLM_PROVIDER` (`gemini`|`anthropic`|`openai`), `LLM_MODEL`
+(defaults: Gemini `gemini-3-flash-preview`, Claude `claude-3-5-sonnet-latest`,
+OpenAI `gpt-4o-mini`).
 The command bar shows an **AI ✦** badge when a provider is active, or
 **rules only** otherwise. Load env vars before starting uvicorn (e.g.
 `export $(grep -v '^#' .env | xargs)` or use a process manager).
