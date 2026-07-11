@@ -1,6 +1,12 @@
-"""Deterministic natural-language command parser.
+"""Natural-language command parser.
 
-TODO: Replace with LLM structured-output call for open-ended commands.
+Hybrid design:
+1. Rule-based (deterministic, instant, no API key) handles the common commands.
+2. If no rule matches AND an LLM provider is configured, fall back to the LLM
+   parser for open-ended / broad instructions.
+3. If neither applies, return a helpful "could not parse" message.
+
+The LLM path is optional — with no API key the app behaves exactly as before.
 """
 
 from __future__ import annotations
@@ -19,62 +25,109 @@ from app.models.layout import (
 )
 from app.services.analysis_engine import AnalysisEngine
 from app.services.layout_operations import LayoutOperations
+from app.services.llm_parser import LLMCommandParser, LLMError
 
 
 class CommandParser:
-    """Rule-based command parser for MVP."""
+    """Rule-based parser with an optional LLM fallback."""
 
     def __init__(self) -> None:
         self._engine = AnalysisEngine()
         self._ops = LayoutOperations()
+        self._llm = LLMCommandParser()
 
     def parse(self, request: CommandRequest) -> CommandResponse:
         command = request.command.strip().lower()
         layout = request.layout
-        actions: list[CommandAction] = []
-        explanation = ""
 
+        # 1. Try the deterministic rule-based parser first.
+        rule_result = self._parse_rules(command, layout)
+        if rule_result is not None:
+            actions, explanation = rule_result
+            return self._build_response(layout, actions, explanation, source="rule")
+
+        # 2. Fall back to the LLM for open-ended commands, if configured.
+        if self._llm.is_configured():
+            try:
+                actions, explanation = self._llm.parse(request.command, layout)
+                return self._build_response(layout, actions, explanation, source="llm")
+            except LLMError as exc:
+                return CommandResponse(
+                    actions=[],
+                    explanation=(
+                        f"Could not interpret '{request.command}'. {exc}"
+                    ),
+                    source="none",
+                )
+
+        # 3. No rule matched and no LLM available.
+        return CommandResponse(
+            actions=[],
+            explanation=(
+                f"Could not parse command: '{request.command}'. "
+                "Try: 'move SRAM closer to compute', 'lock the PLL', "
+                "'optimize for timing', 'reduce congestion', "
+                "'generate three candidate layouts'. "
+                "For open-ended commands, set ANTHROPIC_API_KEY or OPENAI_API_KEY "
+                "to enable the AI parser."
+            ),
+            source="none",
+        )
+
+    def _parse_rules(
+        self, command: str, layout: Layout
+    ) -> tuple[list[CommandAction], str] | None:
+        """Return (actions, explanation) if a rule matches, else None."""
         if self._matches(command, r"sram.*clos(er|e).*compute|move sram.*compute"):
-            actions, explanation = self._sram_closer_to_compute(layout)
+            return self._sram_closer_to_compute(layout)
 
-        elif self._matches(command, r"lock.*pll|fix.*pll"):
-            actions, explanation = self._lock_pll(layout)
+        if self._matches(command, r"lock.*pll|fix.*pll"):
+            return self._lock_pll(layout)
 
-        elif self._matches(command, r"optimi[sz]e.*timing|improve.*timing"):
-            actions, explanation = self._optimize_timing(layout)
+        if self._matches(command, r"optimi[sz]e.*timing|improve.*timing"):
+            return self._optimize_timing(layout)
 
-        elif self._matches(command, r"reduce.*congestion|fix.*congestion|less.*congestion"):
-            actions, explanation = self._reduce_congestion(layout)
+        if self._matches(command, r"reduce.*congestion|fix.*congestion|less.*congestion"):
+            return self._reduce_congestion(layout)
 
-        elif self._matches(command, r"generate.*candidate|create.*candidate|candidate layout"):
-            actions, explanation = self._generate_candidates_action(layout)
+        if self._matches(command, r"generate.*candidate|create.*candidate|candidate layout"):
+            return self._generate_candidates_action(layout)
 
-        elif self._matches(command, r"lock\s+(\w+)"):
+        if self._matches(command, r"lock\s+(\w+)"):
             block_id = re.search(r"lock\s+(\w+)", command)
             if block_id:
                 target = self._find_block_id(layout, block_id.group(1))
                 if target:
-                    actions = [
-                        CommandAction(
-                            type=ActionType.LOCK_BLOCKS,
-                            targets=[target],
-                            reason=f"Lock block '{target}' to prevent movement.",
-                        )
-                    ]
-                    explanation = f"Lock {target} in place."
+                    return (
+                        [
+                            CommandAction(
+                                type=ActionType.LOCK_BLOCKS,
+                                targets=[target],
+                                reason=f"Lock block '{target}' to prevent movement.",
+                            )
+                        ],
+                        f"Lock {target} in place.",
+                    )
 
-        else:
-            explanation = (
-                f"Could not parse command: '{request.command}'. "
-                "Try: 'move SRAM closer to compute', 'lock the PLL', "
-                "'optimize for timing', 'reduce congestion', "
-                "'generate three candidate layouts'."
-            )
+        return None
 
+    def _build_response(
+        self,
+        layout: Layout,
+        actions: list[CommandAction],
+        explanation: str,
+        source: str,
+    ) -> CommandResponse:
         preview_layout = None
         expected_delta: dict[str, float] = {}
 
-        if actions and actions[0].type != ActionType.GENERATE_CANDIDATES:
+        applyable = [
+            a
+            for a in actions
+            if (a.type if isinstance(a.type, str) else a.type.value)
+            != ActionType.GENERATE_CANDIDATES.value
+        ]
+        if applyable:
             preview_layout = self._ops.apply_actions(copy.deepcopy(layout), actions)
             baseline_metrics = self._engine.analyze(layout)
             preview_metrics = self._engine.analyze(preview_layout)
@@ -101,6 +154,7 @@ class CommandParser:
             preview_layout=preview_layout,
             expected_metric_delta=expected_delta,
             explanation=explanation,
+            source=source,
         )
 
     def _matches(self, command: str, pattern: str) -> bool:

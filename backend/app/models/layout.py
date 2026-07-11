@@ -106,6 +106,8 @@ class CommandResponse(BaseModel):
     preview_layout: Layout | None = None
     expected_metric_delta: dict[str, float] = Field(default_factory=dict)
     explanation: str = ""
+    # How the command was interpreted: "rule", "llm", or "none".
+    source: str = "rule"
 
 
 class ApplyActionsRequest(BaseModel):

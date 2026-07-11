@@ -103,7 +103,23 @@ class LayoutOperations:
             self._timing_optimize(layout, action.targets)
         elif mode == "spread":
             self._spread_blocks(layout, action.targets, params.get("factor", 1.2))
-        else:
+        elif mode == "delta":
+            self._move_delta(
+                layout,
+                action.targets,
+                float(params.get("dx", 0) or 0),
+                float(params.get("dy", 0) or 0),
+            )
+        elif mode == "absolute":
+            self._move_absolute(layout, action.targets, params.get("x"), params.get("y"))
+        elif mode == "region":
+            self._move_region(
+                layout,
+                action.targets,
+                str(params.get("region", "center")),
+                float(params.get("factor", 0.5) or 0.5),
+            )
+        else:  # "toward" / "anchor"
             anchor_id = params.get("anchor", "compute_array")
             factor = params.get("factor", 0.35)
             anchor = self._find_block(layout, anchor_id)
@@ -112,6 +128,49 @@ class LayoutOperations:
             for block in layout.blocks:
                 if block.id in action.targets and not block.fixed:
                     self._move_toward(block, anchor, factor)
+
+    def _move_delta(
+        self, layout: Layout, targets: list[str], dx: float, dy: float
+    ) -> None:
+        for block in layout.blocks:
+            if block.id in targets and not block.fixed:
+                block.x = self._clamp_x(layout, block, block.x + dx)
+                block.y = self._clamp_y(layout, block, block.y + dy)
+
+    def _move_absolute(
+        self, layout: Layout, targets: list[str], x, y
+    ) -> None:
+        for block in layout.blocks:
+            if block.id in targets and not block.fixed:
+                if x is not None:
+                    block.x = self._clamp_x(layout, block, float(x))
+                if y is not None:
+                    block.y = self._clamp_y(layout, block, float(y))
+
+    def _move_region(
+        self, layout: Layout, targets: list[str], region: str, factor: float
+    ) -> None:
+        w, h = layout.chip.width, layout.chip.height
+        anchors = {
+            "top_left": (w * 0.2, h * 0.2),
+            "top_right": (w * 0.8, h * 0.2),
+            "bottom_left": (w * 0.2, h * 0.8),
+            "bottom_right": (w * 0.8, h * 0.8),
+            "center": (w * 0.5, h * 0.5),
+        }
+        tx, ty = anchors.get(region, anchors["center"])
+        for block in layout.blocks:
+            if block.id in targets and not block.fixed:
+                bcx = block.x + block.width / 2
+                bcy = block.y + block.height / 2
+                block.x = self._clamp_x(layout, block, block.x + (tx - bcx) * factor)
+                block.y = self._clamp_y(layout, block, block.y + (ty - bcy) * factor)
+
+    def _clamp_x(self, layout: Layout, block: Block, x: float) -> float:
+        return max(0.0, min(x, layout.chip.width - block.width))
+
+    def _clamp_y(self, layout: Layout, block: Block, y: float) -> float:
+        return max(0.0, min(y, layout.chip.height - block.height))
 
     def _lock_blocks(self, layout: Layout, action: CommandAction) -> None:
         for block in layout.blocks:
