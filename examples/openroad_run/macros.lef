@@ -1,0 +1,69 @@
+VERSION 5.8 ;
+BUSBITCHARS "[]" ;
+DIVIDERCHAR "/" ;
+
+MACRO sram_512x64
+  CLASS BLOCK ;
+  ORIGIN 0 0 ;
+  SIZE 150 BY 190 ;
+  PIN data
+    DIRECTION OUTPUT ;
+  END data
+  PIN addr
+    DIRECTION INPUT ;
+  END addr
+  PIN clk
+    DIRECTION INPUT ;
+  END clk
+  PIN VDD
+    DIRECTION INOUT ;
+  END VDD
+  PIN VSS
+    DIRECTION INOUT ;
+  END VSS
+END sram_512x64
+
+MACRO pll_top
+  CLASS BLOCK ;
+  ORIGIN 0 0 ;
+  SIZE 90 BY 90 ;
+  PIN clk_out
+    DIRECTION OUTPUT ;
+  END clk_out
+  PIN ref_clk
+    DIRECTION INPUT ;
+  END ref_clk
+END pll_top
+
+MACRO mem_ctrl
+  CLASS BLOCK ;
+  ORIGIN 0 0 ;
+  SIZE 170 BY 130 ;
+  PIN noc_if
+    DIRECTION INPUT ;
+  END noc_if
+  PIN phy
+    DIRECTION OUTPUT ;
+  END phy
+END mem_ctrl
+
+MACRO gpio_pad
+  CLASS PAD ;
+  ORIGIN 0 0 ;
+  SIZE 40 BY 40 ;
+  PIN pad
+    DIRECTION INOUT ;
+  END pad
+END gpio_pad
+
+MACRO INV_X1
+  CLASS CORE ;
+  ORIGIN 0 0 ;
+  SIZE 1.2 BY 1.4 ;
+  PIN A
+    DIRECTION INPUT ;
+  END A
+  PIN Y
+    DIRECTION OUTPUT ;
+  END Y
+END INV_X1

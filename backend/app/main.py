@@ -6,10 +6,15 @@ import json
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load backend/.env before anything reads os.environ (e.g. the LLM parser).
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.adapters.mock_eda import MockEDAAdapter
+from app.eda.adapters import MockEDAAdapter, OpenROADImportAdapter
 from app.models.layout import (
     AnalyzeResponse,
     ApplyActionsRequest,
@@ -19,13 +24,15 @@ from app.models.layout import (
     ExportRequest,
     ExportResponse,
     GenerateCandidatesResponse,
+    ImportRequest,
+    ImportResponse,
     Layout,
 )
 from app.services.analysis_engine import AnalysisEngine
 from app.services.command_parser import CommandParser
 from app.services.layout_operations import LayoutOperations
+from app.services.validation import ValidationEngine
 
-# Allow overriding the examples directory (e.g. in Docker) via env var.
 EXAMPLES_DIR = Path(
     os.environ.get("EXAMPLES_DIR", Path(__file__).resolve().parents[2] / "examples")
 )
@@ -33,7 +40,7 @@ EXAMPLES_DIR = Path(
 app = FastAPI(
     title="Chip Floorplan Workspace API",
     description="AI-assisted backend chip floorplanning workspace",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -47,7 +54,9 @@ app.add_middleware(
 _engine = AnalysisEngine()
 _parser = CommandParser()
 _ops = LayoutOperations()
-_eda = MockEDAAdapter()
+_validator = ValidationEngine()
+_mock = MockEDAAdapter()
+_openroad = OpenROADImportAdapter()
 
 
 def _load_example_layout() -> Layout:
@@ -56,6 +65,7 @@ def _load_example_layout() -> Layout:
     layout = Layout.model_validate(data)
     if layout.metrics is None:
         layout.metrics = _engine.analyze(layout)
+    _engine.enrich(layout)
     return layout
 
 
@@ -66,7 +76,6 @@ def health() -> dict[str, str]:
 
 @app.get("/api/config")
 def get_config() -> dict[str, object]:
-    """Report runtime capabilities to the frontend."""
     return {
         "llm_enabled": _parser._llm.is_configured(),
         "llm_provider": _parser._llm.provider,
@@ -83,8 +92,12 @@ def get_example_layout() -> Layout:
 def analyze_layout(layout: Layout) -> AnalyzeResponse:
     metrics = _engine.analyze(layout)
     layout.metrics = metrics
+    _engine.enrich(layout)
     explanations = _engine.explain(layout, metrics)
-    return AnalyzeResponse(layout=layout, metrics=metrics, explanations=explanations)
+    drc = _validator.check(layout, metrics)
+    return AnalyzeResponse(
+        layout=layout, metrics=metrics, explanations=explanations, drc=drc
+    )
 
 
 @app.post("/api/layouts/command", response_model=CommandResponse)
@@ -101,11 +114,12 @@ def apply_actions(request: ApplyActionsRequest) -> Layout:
 def generate_candidates(layout: Layout) -> GenerateCandidatesResponse:
     baseline_metrics = _engine.analyze(layout)
     layout.metrics = baseline_metrics
+    _engine.enrich(layout)
     raw_candidates = _ops.generate_candidates(layout, count=3)
 
+    names = {"timing": "Timing Optimized", "congestion": "Congestion Optimized", "compact": "Compact"}
     candidates: list[CandidateLayout] = []
-    names = ["Candidate A", "Candidate B", "Candidate C"]
-    for i, (candidate_layout, explanation) in enumerate(raw_candidates):
+    for i, (candidate_layout, objective, explanation, tradeoff) in enumerate(raw_candidates):
         cm = candidate_layout.metrics or _engine.analyze(candidate_layout)
         deltas = {
             "wns": round(cm.wns - baseline_metrics.wns, 3),
@@ -114,13 +128,16 @@ def generate_candidates(layout: Layout) -> GenerateCandidatesResponse:
             "congestion_score": round(cm.congestion_score - baseline_metrics.congestion_score, 3),
             "area_utilization": round(cm.area_utilization - baseline_metrics.area_utilization, 3),
             "power_estimate": round(cm.power_estimate - baseline_metrics.power_estimate, 2),
+            "drc_count": cm.drc_count - baseline_metrics.drc_count,
         }
         candidates.append(
             CandidateLayout(
                 id=f"candidate_{chr(97 + i)}",
-                name=names[i] if i < len(names) else f"Candidate {i + 1}",
+                name=names.get(objective, f"Candidate {chr(65 + i)}"),
+                objective=objective,
                 layout=candidate_layout,
                 explanation=explanation,
+                tradeoff=tradeoff,
                 metric_deltas=deltas,
             )
         )
@@ -128,18 +145,22 @@ def generate_candidates(layout: Layout) -> GenerateCandidatesResponse:
     return GenerateCandidatesResponse(baseline=layout, candidates=candidates)
 
 
+@app.post("/api/import/openroad", response_model=ImportResponse)
+def import_openroad(request: ImportRequest) -> ImportResponse:
+    """Offline import of an existing OpenROAD/OpenLane run directory."""
+    return _openroad.import_run(request.path)
+
+
 @app.post("/api/layouts/export", response_model=ExportResponse)
 def export_layout(request: ExportRequest) -> ExportResponse:
+    name = request.layout.chip.name
     if request.format == "json":
-        content = request.layout.model_dump_json(indent=2)
-        filename = f"{request.layout.chip.name}_layout.json"
+        content = request.layout.model_dump_json(indent=2, by_alias=True)
+        filename = f"{name}_layout.json"
     elif request.format == "tcl":
-        content = _eda.export_constraints(request.layout)
-        filename = f"{request.layout.chip.name}_constraints.tcl"
-        # TODO: Full Tcl constraint export for OpenROAD
+        content = _mock.export_constraints(request.layout)
+        filename = f"{name}_constraints.tcl"
     else:
-        content = "# DEF export not yet implemented\n# TODO: DEF parser/writer"
-        filename = f"{request.layout.chip.name}_floorplan.def"
-        # TODO: DEF export
-
+        content = _mock.export_def(request.layout)
+        filename = f"{name}_floorplan.def"
     return ExportResponse(format=request.format, content=content, filename=filename)

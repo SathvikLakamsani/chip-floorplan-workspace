@@ -1,0 +1,10 @@
+{
+  "finish__timing__setup__ws": -0.169,
+  "finish__timing__setup__tns": -4.21,
+  "finish__timing__setup__violating__count": 7,
+  "finish__route__wirelength": 2589000,
+  "finish__design__instance__utilization": 0.42,
+  "finish__power__total": 6.65,
+  "finish__design__violations": 3,
+  "finish__congestion__overflow__score": 0.73
+}

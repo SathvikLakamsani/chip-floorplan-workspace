@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export default function Header() {
+export default function Header({ onImport }: { onImport?: () => void }) {
   const pathname = usePathname();
 
   return (
@@ -39,8 +39,16 @@ export default function Header() {
         </Link>
       </nav>
 
-      <div className="ml-auto text-xs text-chip-muted font-mono">
-        OpenROAD Flow Scripts · Mock Engine
+      <div className="ml-auto flex items-center gap-3">
+        {onImport && (
+          <button
+            onClick={onImport}
+            className="rounded border border-chip-accent2/40 bg-chip-accent2/10 px-3 py-1 text-xs text-chip-accent2 hover:bg-chip-accent2/20"
+          >
+            Import OpenROAD
+          </button>
+        )}
+        <span className="font-mono text-xs text-chip-muted">EDA-aware · Mock Engine</span>
       </div>
     </header>
   );

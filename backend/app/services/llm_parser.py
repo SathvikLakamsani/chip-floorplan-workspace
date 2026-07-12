@@ -100,9 +100,12 @@ class LLMCommandParser:
     def _build_system_prompt(self) -> str:
         return (
             "You are a physical-design assistant for a chip floorplanning tool. "
-            "You translate a natural-language layout instruction into a strict "
-            "JSON list of structured actions. You NEVER apply changes yourself; "
-            "you only propose actions that the tool will preview before applying.\n\n"
+            "You translate ANY natural-language layout instruction into a strict "
+            "JSON list of structured actions. You are the primary interpreter — "
+            "handle open-ended, macro-level requests (adding/removing components, "
+            "restructuring, resizing the die, wiring up nets), not just small "
+            "nudges. You NEVER apply changes yourself; the tool previews your "
+            "actions before applying.\n\n"
             "Coordinate system: origin (0,0) is top-left. x increases to the "
             "right, y increases downward. Units are microns.\n\n"
             "Return ONLY a JSON object of this exact shape (no prose, no code "
@@ -111,21 +114,39 @@ class LLMCommandParser:
             '  "actions": [ { "type": ..., "targets": [...], "reason": ..., "params": {...} } ],\n'
             '  "explanation": "one-sentence plain-English summary"\n'
             "}\n\n"
+            "You may return MULTIPLE actions to satisfy one instruction (e.g. add "
+            "a block, then connect it with a net, then make room around it).\n\n"
             "Valid action types and their params:\n"
-            '- "move_blocks": move one or more blocks. targets = block ids. params is ONE of:\n'
-            '    {"mode":"toward","anchor":"<block_id>","factor":0.0-1.0}  (move fraction of the way toward another block)\n'
-            '    {"mode":"delta","dx":<microns>,"dy":<microns>}            (relative shift; +dx right, +dy down)\n'
-            '    {"mode":"absolute","x":<microns>,"y":<microns>}           (set position; use for a single target)\n'
+            "MOVEMENT & PROPERTIES:\n"
+            '- "move_blocks": targets = block ids. params is ONE of:\n'
+            '    {"mode":"toward","anchor":"<block_id>","factor":0.0-1.0}\n'
+            '    {"mode":"delta","dx":<microns>,"dy":<microns>}\n'
+            '    {"mode":"absolute","x":<microns>,"y":<microns>}\n'
             '    {"mode":"region","region":"top_left|top_right|bottom_left|bottom_right|center","factor":0.0-1.0}\n'
-            '    {"mode":"spread","factor":>1.0}                           (push targets apart from their shared center)\n'
-            '    {"mode":"timing_optimize"}                                (cluster high-criticality connected targets)\n'
-            '- "lock_blocks": pin blocks so they cannot move. targets = block ids. params = {}\n'
-            '- "resize_blocks": params = {"delta_width":<microns>,"delta_height":<microns>}\n'
-            '- "update_property": params = {"property":"fixed|power|criticality|clock_domain|voltage_domain","value":<value>}\n'
+            '    {"mode":"spread","factor":>1.0}\n'
+            '    {"mode":"separate","margin":<microns>}   (resolve overlaps between targets)\n'
+            '    {"mode":"timing_optimize"}\n'
+            '- "lock_blocks" / "unlock_blocks": targets = block ids. params = {}\n'
+            '- "resize_blocks": targets = block ids. params = {"delta_width":<microns>,"delta_height":<microns>}\n'
+            '- "update_property": targets = block ids. params = {"property":"fixed|power|criticality|clock_domain|voltage_domain|orientation|type|class","value":<value>}\n'
+            '- "align_blocks": targets = block ids. params = {"edge":"left|right|top|bottom|centerx|centery"}\n'
+            '- "distribute_blocks": targets = block ids (>=3). params = {"axis":"x|y"} (even spacing)\n'
+            '- "add_keepout": targets = block ids. params = {"margin":<microns>}\n'
+            '- "add_constraint": targets = block ids. params = {"constraint_type":"proximity|fixed|clock|keepout","priority":"low|medium|high"}\n'
+            "STRUCTURAL EDITS (create / remove / duplicate):\n"
+            '- "add_block": create a NEW block. targets = []. params = {"name":"<label>","type":"compute|sram|memory|noc|io|pll|clock|controller|analog|other","width":<microns>,"height":<microns>,"x":<optional>,"y":<optional>,"power":<optional W>,"criticality":0.0-1.0}. If x/y omitted it is placed near the core center and de-overlapped automatically.\n'
+            '- "clone_block": duplicate existing blocks. targets = block ids. params = {"dx":<microns>,"dy":<microns>,"name":"<optional>"}\n'
+            '- "remove_block": delete blocks (and their nets). targets = block ids. params = {}\n'
+            '- "add_net": connect blocks. targets = []. params = {"source":"<block_id>","sinks":["<block_id>",...],"name":"<optional>","criticality":0.0-1.0,"type":"signal|clock|power|ground"}\n'
+            '- "remove_net": delete nets. targets = NET ids. params = {}\n'
+            '- "set_chip": resize the die/core. targets = []. params = {"width":<microns>,"height":<microns>} or {"die":{"x","y","width","height"},"core":{...}}\n'
+            "META:\n"
             '- "generate_candidates": params = {"count":2-3}. targets = []\n\n'
             "Rules:\n"
-            "- Only reference block ids that exist in the provided layout.\n"
-            "- Never move or resize a block whose \"fixed\" is true.\n"
+            "- Only reference block ids / net ids that exist in the provided layout (except when creating new ones via add_block/add_net).\n"
+            "- Never move, resize, align, or distribute a block whose \"fixed\" is true.\n"
+            "- When the user asks to add something, ALWAYS use add_block (and add_net if a connection is implied) — do not refuse.\n"
+            "- Choose a sensible type/class and size from context (e.g. an SRAM ~ 120x160, an IO pad ~ 40x40).\n"
             "- Prefer the simplest action set that satisfies the instruction.\n"
             "- Always include a short human-readable \"reason\" per action.\n"
         )
@@ -136,6 +157,7 @@ class LLMCommandParser:
                 "id": b.id,
                 "name": b.name,
                 "type": b.type if isinstance(b.type, str) else b.type.value,
+                "class": b.cls if isinstance(b.cls, str) else b.cls.value,
                 "x": b.x,
                 "y": b.y,
                 "width": b.width,
@@ -151,14 +173,21 @@ class LLMCommandParser:
                 "source": n.source,
                 "sinks": n.sinks,
                 "criticality": n.criticality,
+                "type": n.type if isinstance(n.type, str) else n.type.value,
             }
             for n in layout.nets
         ]
+        core = layout.chip.core
         context = {
             "chip": {
                 "name": layout.chip.name,
                 "width": layout.chip.width,
                 "height": layout.chip.height,
+                "core": (
+                    {"x": core.x, "y": core.y, "width": core.width, "height": core.height}
+                    if core
+                    else None
+                ),
             },
             "blocks": blocks,
             "nets": nets,
@@ -294,7 +323,25 @@ class LLMCommandParser:
     ) -> tuple[list[CommandAction], str]:
         payload = self._extract_json(raw)
         valid_ids = {b.id for b in layout.blocks}
+        valid_net_ids = {n.id for n in layout.nets}
         fixed_ids = {b.id for b in layout.blocks if b.fixed}
+
+        # Actions that create objects or act globally: no existing target required.
+        no_target_required = {
+            ActionType.ADD_BLOCK.value,
+            ActionType.ADD_NET.value,
+            ActionType.SET_CHIP.value,
+            ActionType.GENERATE_CANDIDATES.value,
+            ActionType.SET_OVERLAY.value,
+            ActionType.EXPLAIN.value,
+        }
+        # Actions that may not touch fixed blocks.
+        movement_actions = {
+            ActionType.MOVE_BLOCKS.value,
+            ActionType.RESIZE_BLOCKS.value,
+            ActionType.ALIGN_BLOCKS.value,
+            ActionType.DISTRIBUTE_BLOCKS.value,
+        }
 
         actions: list[CommandAction] = []
         for item in payload.get("actions", []):
@@ -304,17 +351,22 @@ class LLMCommandParser:
             if atype not in _VALID_ACTION_TYPES:
                 continue
 
-            targets = [t for t in item.get("targets", []) if t in valid_ids]
-            # Never let move/resize touch fixed blocks.
-            if atype in (
-                ActionType.MOVE_BLOCKS.value,
-                ActionType.RESIZE_BLOCKS.value,
-            ):
-                targets = [t for t in targets if t not in fixed_ids]
+            raw_targets = item.get("targets", []) or []
+
+            if atype == ActionType.REMOVE_NET.value:
+                # Targets are net ids here.
+                targets = [t for t in raw_targets if t in valid_net_ids]
                 if not targets:
                     continue
-            elif atype != ActionType.GENERATE_CANDIDATES.value and not targets:
-                continue
+            elif atype in no_target_required:
+                # Keep any valid block ids but don't require them.
+                targets = [t for t in raw_targets if t in valid_ids]
+            else:
+                targets = [t for t in raw_targets if t in valid_ids]
+                if atype in movement_actions:
+                    targets = [t for t in targets if t not in fixed_ids]
+                if not targets:
+                    continue
 
             actions.append(
                 CommandAction(

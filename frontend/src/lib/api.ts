@@ -4,6 +4,7 @@ import type {
   CommandResponse,
   ExportResponse,
   GenerateCandidatesResponse,
+  ImportResponse,
   Layout,
 } from "./types";
 
@@ -77,5 +78,12 @@ export async function exportLayout(
   return fetchApi<ExportResponse>("/api/layouts/export", {
     method: "POST",
     body: JSON.stringify({ layout, format }),
+  });
+}
+
+export async function importOpenROAD(path: string): Promise<ImportResponse> {
+  return fetchApi<ImportResponse>("/api/import/openroad", {
+    method: "POST",
+    body: JSON.stringify({ path }),
   });
 }

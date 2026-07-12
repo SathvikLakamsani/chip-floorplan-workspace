@@ -105,21 +105,31 @@ export default function ComparePage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {candidates.map((c) => (
                   <div key={c.id} className="panel p-4 flex flex-col">
-                    <h3 className="font-mono text-chip-accent mb-2">{c.name}</h3>
-                    <p className="text-xs text-chip-text leading-relaxed flex-1 mb-4">
-                      {c.explanation}
-                    </p>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="font-mono text-chip-accent">{c.name}</h3>
+                      {c.objective && (
+                        <span className="rounded-full border border-chip-accent2/30 bg-chip-accent2/10 px-2 py-0.5 text-[9px] uppercase text-chip-accent2">
+                          {c.objective}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mb-3 flex-1 text-xs leading-relaxed text-chip-text">{c.explanation}</p>
+                    {c.tradeoff && (
+                      <p className="mb-3 rounded border border-chip-border bg-chip-bg px-2 py-1.5 text-[10px] leading-snug text-chip-warn">
+                        ⚖ {c.tradeoff}
+                      </p>
+                    )}
                     {c.layout.metrics && (
-                      <div className="grid grid-cols-2 gap-2 mb-4 text-[10px] font-mono">
+                      <div className="mb-4 grid grid-cols-2 gap-2 font-mono text-[10px]">
                         <MiniMetric label="WNS" value={`${c.layout.metrics.wns} ns`} />
                         <MiniMetric label="Congestion" value={c.layout.metrics.congestion_score.toFixed(2)} />
                         <MiniMetric label="Wire Len" value={`${c.layout.metrics.wire_length.toFixed(0)} μm`} />
-                        <MiniMetric label="Power" value={`${c.layout.metrics.power_estimate} W`} />
+                        <MiniMetric label="DRC" value={String(c.layout.metrics.drc_count)} />
                       </div>
                     )}
                     <button
                       onClick={() => loadCandidate(c.id)}
-                      className="w-full py-2 text-xs rounded bg-chip-accent/20 text-chip-accent border border-chip-accent/30 hover:bg-chip-accent/30"
+                      className="w-full rounded border border-chip-accent/30 bg-chip-accent/20 py-2 text-xs text-chip-accent hover:bg-chip-accent/30"
                     >
                       Load onto canvas
                     </button>
@@ -137,10 +147,12 @@ export default function ComparePage() {
 const METRIC_ROWS = [
   { key: "wns", label: "WNS (ns)", unit: "", invert: false },
   { key: "tns", label: "TNS (ns)", unit: "", invert: false },
+  { key: "violating_paths", label: "Violating Paths", unit: "", invert: true },
   { key: "wire_length", label: "Wire Length (μm)", unit: "", invert: true },
   { key: "congestion_score", label: "Congestion Score", unit: "", invert: true },
   { key: "area_utilization", label: "Area Utilization", unit: "%", invert: false },
   { key: "power_estimate", label: "Power Estimate (W)", unit: "", invert: true },
+  { key: "drc_count", label: "DRC Violations", unit: "", invert: true },
 ];
 
 function formatMetric(metrics: Metrics, key: string, unit: string): string {

@@ -1,0 +1,33 @@
+======================================================================
+ report_checks -path_delay max -group_count 5
+======================================================================
+
+Startpoint: compute_array (rising edge-triggered flip-flop clocked by core_clk)
+Endpoint: sram_inst_2 (rising edge-triggered flip-flop clocked by core_clk)
+Path Group: core_clk
+Path Type: max
+   0.00   0.00 ^ compute_array/CK (DFF_X1)
+   0.43   0.43 ^ compute_array/Q (DFF_X1)
+   1.90   2.33 ^ sram_inst_2/D (sram_512x64)
+   data arrival time          2.33
+   data required time         2.16
+   -----------------------------------
+   slack (VIOLATED)          -0.169
+
+Startpoint: compute_array (rising edge-triggered flip-flop clocked by core_clk)
+Endpoint: sram_inst_3 (rising edge-triggered flip-flop clocked by core_clk)
+Path Group: core_clk
+Path Type: max
+   slack (VIOLATED)          -0.121
+
+Startpoint: pll_inst (clock source)
+Endpoint: compute_array (rising edge-triggered flip-flop clocked by ref_clk)
+Path Group: ref_clk
+Path Type: max
+   slack (VIOLATED)          -0.084
+
+Startpoint: noc_router (rising edge-triggered flip-flop clocked by noc_clk)
+Endpoint: mem_ctrl_inst (rising edge-triggered flip-flop clocked by noc_clk)
+Path Group: noc_clk
+Path Type: max
+   slack (MET)                0.052

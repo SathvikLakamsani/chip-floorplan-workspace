@@ -22,14 +22,6 @@ body {
   font-family: "Inter", system-ui, sans-serif;
 }
 
-.react-flow__node {
-  font-family: "JetBrains Mono", monospace;
-}
-
-.react-flow__edge-path {
-  stroke-linecap: round;
-}
-
 .grid-bg {
   background-image:
     linear-gradient(rgba(0, 229, 160, 0.03) 1px, transparent 1px),
@@ -60,4 +52,44 @@ body {
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: #1e2a3a;
   border-radius: 3px;
+}
+
+.canvas-btn {
+  @apply flex h-7 w-7 items-center justify-center rounded border border-chip-border bg-chip-panel/90 text-chip-text hover:border-chip-accent hover:text-chip-accent transition-colors font-mono text-sm;
+}
+
+.overlay-chip {
+  @apply flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] transition-colors cursor-pointer select-none;
+}
+
+.overlay-chip-on {
+  @apply border-chip-accent/60 bg-chip-accent/10 text-chip-accent;
+}
+
+.overlay-chip-off {
+  @apply border-chip-border bg-chip-panel text-chip-muted hover:text-chip-text;
+}
+
+.tab-btn {
+  @apply px-3 py-1.5 font-mono text-xs rounded-md transition-colors;
+}
+
+.tab-btn-on {
+  @apply bg-chip-accent/15 text-chip-accent border border-chip-accent/40;
+}
+
+.tab-btn-off {
+  @apply text-chip-muted hover:text-chip-text border border-transparent;
+}
+
+.sev-error {
+  @apply border-l-2 border-chip-danger bg-chip-danger/5;
+}
+
+.sev-warning {
+  @apply border-l-2 border-chip-warn bg-chip-warn/5;
+}
+
+.sev-info {
+  @apply border-l-2 border-chip-accent2 bg-chip-accent2/5;
 }

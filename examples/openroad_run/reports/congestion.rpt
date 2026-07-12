@@ -1,0 +1,8 @@
+Routing congestion report (global route)
+Format: x y width height utilization
+500 360 200 220 0.82
+680 560 230 190 0.71
+150 360 150 190 0.35
+900 360 150 190 0.30
+Total overflow: 128
+Worst congestion: 0.82

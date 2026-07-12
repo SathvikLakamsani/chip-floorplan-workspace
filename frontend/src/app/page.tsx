@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import LeftSidebar from "@/components/LeftSidebar";
-import RightInspector from "@/components/RightInspector";
+import RightPanel from "@/components/RightPanel";
 import FloorplanCanvas from "@/components/FloorplanCanvas";
+import OverlayBar from "@/components/OverlayBar";
 import CommandBar from "@/components/CommandBar";
+import ImportPanel from "@/components/ImportPanel";
 import { useLayoutStore } from "@/store/layoutStore";
 
 export default function EditorPage() {
@@ -13,28 +15,32 @@ export default function EditorPage() {
   const loadConfig = useLayoutStore((s) => s.loadConfig);
   const loading = useLayoutStore((s) => s.loading);
   const error = useLayoutStore((s) => s.error);
+  const currentLayout = useLayoutStore((s) => s.currentLayout);
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     loadConfig();
-    loadExample();
-  }, [loadConfig, loadExample]);
+    if (!currentLayout) loadExample();
+  }, [loadConfig, loadExample, currentLayout]);
 
   return (
-    <div className="h-screen flex flex-col">
-      <Header />
+    <div className="flex h-screen flex-col">
+      <Header onImport={() => setImportOpen(true)} />
       {loading && !error && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 px-3 py-1 rounded bg-chip-panel border border-chip-border text-xs text-chip-accent font-mono">
-          Loading...
+        <div className="absolute left-1/2 top-14 z-50 -translate-x-1/2 rounded border border-chip-border bg-chip-panel px-3 py-1 font-mono text-xs text-chip-accent">
+          Working…
         </div>
       )}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1">
         <LeftSidebar />
-        <main className="flex-1 flex flex-col min-w-0">
+        <main className="flex min-w-0 flex-1 flex-col">
+          <OverlayBar />
           <FloorplanCanvas />
           <CommandBar />
         </main>
-        <RightInspector />
+        <RightPanel />
       </div>
+      {importOpen && <ImportPanel onClose={() => setImportOpen(false)} />}
     </div>
   );
 }
