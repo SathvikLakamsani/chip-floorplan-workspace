@@ -36,6 +36,8 @@ DEFAULT_ALLOWED_ORIGINS = [
     "https://chip-floorplan-workspace.vercel.app",
     "https://chip-floorplan-workspace-chreate.vercel.app",
     "https://chip-floorplan-workspace-sathviklakamsani1-1534-chreate.vercel.app",
+    "https://chreate.app",
+    "https://www.chreate.app",
 ]
 
 ALLOWED_ORIGINS = [
