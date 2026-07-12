@@ -27,8 +27,24 @@ from app.services.layout_operations import LayoutOperations
 
 # Allow overriding the examples directory (e.g. in Docker) via env var.
 EXAMPLES_DIR = Path(
-    os.environ.get("EXAMPLES_DIR", Path(__file__).resolve().parents[2] / "examples")
+    os.environ.get("EXAMPLES_DIR", Path(__file__).resolve().parents[1] / "examples")
 )
+
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://chip-floorplan-workspace.vercel.app",
+    "https://chip-floorplan-workspace-chreate.vercel.app",
+    "https://chip-floorplan-workspace-sathviklakamsani1-1534-chreate.vercel.app",
+]
+
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "FRONTEND_ORIGINS", ",".join(DEFAULT_ALLOWED_ORIGINS)
+    ).split(",")
+    if origin.strip()
+]
 
 app = FastAPI(
     title="Chip Floorplan Workspace API",
@@ -38,7 +54,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://chip-floorplan-workspace-[a-z0-9-]+-chreate\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
